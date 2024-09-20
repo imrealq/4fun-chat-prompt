@@ -1,0 +1,4 @@
+1. input và stream message
+2. Authentication
+    Dùng Streamlit-Authenticator
+    Lưu thông tin vào sqlite3
