@@ -2,7 +2,10 @@ import os
 
 import streamlit as st
 from anthropic import Anthropic
+from dotenv import load_dotenv
 from openai import OpenAI
+
+load_dotenv()
 
 TITLE = "💬 Welcome to chat prompt"
 API_KEY = os.getenv("API_KEY")
