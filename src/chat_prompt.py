@@ -1,34 +1,55 @@
 import os
 
 import streamlit as st
+from anthropic import Anthropic
 from openai import OpenAI
 
 TITLE = "💬 Welcome to chat prompt"
 API_KEY = os.getenv("API_KEY")
+CLIENT_TYPE = os.getenv("CLIENT_TYPE", "anthropic")
+MODEL = os.getenv("MODEL", "claude-3-sonnet-20240320")
 
 
-def st_sidebar():
-    with st.sidebar:
-        openai_api_key = st.text_input("OpenAI API Key", key="chatbot_api_key", type="password")
-        "[Get an OpenAI API key](https://platform.openai.com/account/api-keys)"
-        "[View the source code](https://github.com/streamlit/llm-examples/blob/main/Chatbot.py)"
-        "[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/streamlit/llm-examples?quickstart=1)"
-
-        return openai_api_key
-
-
-def get_client(api_key=None):
+def get_client(api_key=None, client_type="anthropic"):
     if not api_key:
         st.info("Please add your API key to continue.")
         st.stop()
 
-    client = OpenAI(api_key=api_key)
-    return client
+    if client_type.lower() == "anthropic":
+        return Anthropic(api_key=api_key)
+    elif client_type.lower() == "openai":
+        return OpenAI(api_key=api_key)
+    else:
+        raise ValueError("Invalid client_type. Choose 'openai' or 'anthropic'.")
 
 
-def chat_prompt(client):
+def create_chat_completion(client, messages):
+    if isinstance(client, Anthropic):
+        try:
+            response = client.messages.create(
+                model=MODEL,
+                messages=messages,
+                max_tokens=300,
+            )
+            return response.content[0].text
+        except Exception as e:
+            st.error(f"Error with Anthropic API: {str(e)}")
+            return None
+    elif isinstance(client, OpenAI):
+        try:
+            response = client.chat.completions.create(model=MODEL, messages=messages)
+            return response.choices[0].message.content
+        except Exception as e:
+            st.error(f"Error with OpenAI API: {str(e)}")
+            return None
+    else:
+        st.error("Invalid client type")
+        return None
+
+
+def chat_prompt():
     if "messages" not in st.session_state:
-        st.session_state["messages"] = [{"role": "assistant", "content": "How can I help you?"}]
+        st.session_state.messages = [{"role": "assistant", "content": "How can I help you?"}]
 
     for msg in st.session_state.messages:
         st.chat_message(msg["role"]).write(msg["content"])
@@ -36,18 +57,17 @@ def chat_prompt(client):
     if prompt := st.chat_input():
         st.session_state.messages.append({"role": "user", "content": prompt})
         st.chat_message("user").write(prompt)
-        response = client.chat.completions.create(model="gpt-3.5-turbo", messages=st.session_state.messages)
-        msg = response.choices[0].message.content
-        st.session_state.messages.append({"role": "assistant", "content": msg})
-        st.chat_message("assistant").write(msg)
+        response = create_chat_completion(st.session_state.client, st.session_state.messages)
+        if response:
+            st.session_state.messages.append({"role": "assistant", "content": response})
+            st.chat_message("assistant").write(response)
 
 
 def main():
     st.title(TITLE)
-    # api_key = st_sidebar()
-    client = get_client(API_KEY)
-    if client:
-        chat_prompt(client)
+    st.session_state.client = get_client(API_KEY, CLIENT_TYPE)
+    if st.session_state.client:
+        chat_prompt()
 
 
 if __name__ == "__main__":
