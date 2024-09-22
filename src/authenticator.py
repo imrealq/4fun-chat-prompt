@@ -9,12 +9,13 @@ def sign_in():
     if st.button("Sign In"):
         if db.authenticate(email, password):
             st.success("Success!")
+            st.session_state.authenticated = True
+            st.rerun()
         else:
             st.error("Incorrect email or password!")
 
 
 def main():
     db.init_db()
-
     st.title("Sign In")
     sign_in()
