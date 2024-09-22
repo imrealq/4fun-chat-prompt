@@ -1,4 +1,5 @@
 import hashlib
+import os
 import sqlite3
 from contextlib import contextmanager
 
@@ -19,21 +20,27 @@ def init_db():
         c = conn.cursor()
         c.execute(
             """CREATE TABLE IF NOT EXISTS users
-                 (email TEXT PRIMARY KEY, name TEXT, password TEXT)"""
+                 (email TEXT PRIMARY KEY, name TEXT, salt TEXT, password TEXT)"""
         )
         conn.commit()
 
 
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
+def hash_password(password, salt=None):
+    if salt is None:
+        salt = os.urandom(32)
+    hashed = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 100000)
+    return salt, hashed
 
 
 def add_user(email, name, password):
-    hashed_password = hash_password(password)
+    salt, hashed_password = hash_password(password)
     with get_db_connection() as conn:
         c = conn.cursor()
         try:
-            c.execute("INSERT INTO users (email, name, password) VALUES (?, ?, ?)", (email, name, hashed_password))
+            c.execute(
+                "INSERT INTO users (email, name, salt, password) VALUES (?, ?, ?, ?)",
+                (email, name, salt, hashed_password),
+            )
             conn.commit()
             return True
         except sqlite3.IntegrityError:
@@ -43,9 +50,10 @@ def add_user(email, name, password):
 def authenticate_user(email, password):
     with get_db_connection() as conn:
         c = conn.cursor()
-        c.execute("SELECT password FROM users WHERE email = ?", (email,))
+        c.execute("SELECT salt, password FROM users WHERE email = ?", (email,))
         result = c.fetchone()
         if result:
-            stored_password = result[0]
-            return stored_password == hash_password(password)
+            salt, stored_password = result
+            _, hashed_password = hash_password(password, salt)
+            return hashed_password == stored_password
     return False
